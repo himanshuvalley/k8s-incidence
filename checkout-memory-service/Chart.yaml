@@ -1,0 +1,6 @@
+apiVersion: v2
+name: checkout-memory-service
+description: Helm chart for Alertmend OOMKilled RCA testing
+type: application
+version: 0.1.0
+appVersion: "1.0.0"
