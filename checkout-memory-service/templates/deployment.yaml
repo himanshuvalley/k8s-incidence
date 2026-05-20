@@ -16,6 +16,10 @@ spec:
         incident-type: oomkilled
         rca-test: alertmend
     spec:
+      {{- if .Values.imageCredentials.enabled }}
+      imagePullSecrets:
+        - name: {{ .Values.imageCredentials.secretName }}
+      {{- end }}
       containers:
         - name: checkout-memory-service
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"

@@ -1,9 +1,20 @@
 replicaCount: 1
 
+nameOverride: ""
+fullnameOverride: "checkout-memory-service"
+
 image:
-  repository: ""
+  repository: "incidence.azurecr.io/checkout-memory-service"
   tag: "1.0.0"
   pullPolicy: Always
+
+imageCredentials:
+  enabled: true
+  secretName: "registry-pull-secret"
+  registry: "incidence.azurecr.io"
+  username: ""
+  password: ""
+  email: "devops@example.com"
 
 service:
   type: ClusterIP
