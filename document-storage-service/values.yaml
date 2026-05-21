@@ -1,0 +1,36 @@
+replicaCount: 1
+
+nameOverride: ""
+fullnameOverride: "document-storage-service"
+
+image:
+  repository: "incidence.azurecr.io/document-storage-service"
+  tag: "1.0.0"
+  pullPolicy: Always
+
+imageCredentials:
+  enabled: true
+  secretName: "registry-pull-secret"
+  registry: "incidence.azurecr.io"
+  username: ""
+  password: ""
+  email: "devops@example.com"
+
+service:
+  type: ClusterIP
+  port: 80
+  targetPort: 8080
+
+persistence:
+  enabled: true
+  storageClassName: ""
+  size: 1Gi
+  mountPath: /data
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    cpu: 500m
+    memory: 512Mi

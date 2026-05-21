@@ -1,0 +1,56 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "document-storage-service.fullname" . }}
+  labels:
+    app: document-storage-service
+    app.kubernetes.io/name: {{ include "document-storage-service.name" . }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      app: document-storage-service
+  template:
+    metadata:
+      labels:
+        app: document-storage-service
+        app.kubernetes.io/name: {{ include "document-storage-service.name" . }}
+        incident-category: storage
+        incident-type: pvc-full
+        rca-test: alertmend
+    spec:
+      {{- if .Values.imageCredentials.enabled }}
+      imagePullSecrets:
+        - name: {{ .Values.imageCredentials.secretName }}
+      {{- end }}
+      containers:
+        - name: document-storage-service
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - containerPort: 8080
+          volumeMounts:
+            - name: document-storage
+              mountPath: {{ .Values.persistence.mountPath }}
+          resources:
+{{ toYaml .Values.resources | indent 12 }}
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 2
+            failureThreshold: 3
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            initialDelaySeconds: 15
+            periodSeconds: 10
+            timeoutSeconds: 2
+            failureThreshold: 3
+      volumes:
+        - name: document-storage
+          persistentVolumeClaim:
+            claimName: {{ include "document-storage-service.fullname" . }}-data
