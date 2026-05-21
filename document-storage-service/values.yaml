@@ -10,7 +10,7 @@ image:
 
 imageCredentials:
   enabled: true
-  secretName: "registry-pull-secret"
+  secretName: "document-storage-registry-secret"
   registry: "incidence.azurecr.io"
   username: ""
   password: ""
