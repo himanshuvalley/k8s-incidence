@@ -1,0 +1,17 @@
+{{- if .Values.victim.persistence.enabled }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ .Values.victim.name }}-data
+  labels:
+    app: {{ .Values.victim.name }}
+spec:
+  accessModes:
+    - ReadWriteOnce
+  {{- if .Values.victim.persistence.storageClassName }}
+  storageClassName: {{ .Values.victim.persistence.storageClassName }}
+  {{- end }}
+  resources:
+    requests:
+      storage: {{ .Values.victim.persistence.size }}
+{{- end }}

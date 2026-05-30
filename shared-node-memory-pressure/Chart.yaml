@@ -1,0 +1,6 @@
+apiVersion: v2
+name: shared-node-memory-pressure
+description: Helm chart for shared node memory pressure incident with collateral service impact
+type: application
+version: 0.1.0
+appVersion: "1.0.0"

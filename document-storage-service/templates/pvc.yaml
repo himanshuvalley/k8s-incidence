@@ -1,11 +1,18 @@
-{{- if .Values.imageCredentials.enabled }}
+{{- if .Values.persistence.enabled }}
 apiVersion: v1
-kind: Secret
+kind: PersistentVolumeClaim
 metadata:
-  name: {{ .Values.imageCredentials.secretName }}
+  name: {{ include "document-storage-service.fullname" . }}-data
   labels:
+    app: document-storage-service
     app.kubernetes.io/name: {{ include "document-storage-service.name" . }}
-type: kubernetes.io/dockerconfigjson
-data:
-  .dockerconfigjson: {{ printf "{\"auths\":{\"%s\":{\"username\":\"%s\",\"password\":\"%s\",\"email\":\"%s\",\"auth\":\"%s\"}}}" .Values.imageCredentials.registry .Values.imageCredentials.username .Values.imageCredentials.password .Values.imageCredentials.email (printf "%s:%s" .Values.imageCredentials.username .Values.imageCredentials.password | b64enc) | b64enc }}
+spec:
+  accessModes:
+    - ReadWriteOnce
+  {{- if .Values.persistence.storageClassName }}
+  storageClassName: {{ .Values.persistence.storageClassName }}
+  {{- end }}
+  resources:
+    requests:
+      storage: {{ .Values.persistence.size }}
 {{- end }}

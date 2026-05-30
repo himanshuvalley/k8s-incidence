@@ -1,0 +1,51 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Values.victim.name }}
+  labels:
+    app: {{ .Values.victim.name }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: {{ .Values.victim.name }}
+  template:
+    metadata:
+      labels:
+        app: {{ .Values.victim.name }}
+        incident-role: victim
+        incident-type: shared-node-memory-pressure
+    spec:
+      nodeSelector:
+{{ toYaml .Values.nodeSelector | indent 8 }}
+      {{- if .Values.imageCredentials.enabled }}
+      imagePullSecrets:
+        - name: {{ .Values.imageCredentials.secretName }}
+      {{- end }}
+      containers:
+        - name: {{ .Values.victim.name }}
+          image: "{{ .Values.victim.image.repository }}:{{ .Values.victim.image.tag }}"
+          imagePullPolicy: {{ .Values.victim.image.pullPolicy }}
+          ports:
+            - containerPort: 8080
+          volumeMounts:
+            - name: ledger-data
+              mountPath: {{ .Values.victim.persistence.mountPath }}
+          resources:
+{{ toYaml .Values.victim.resources | indent 12 }}
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            initialDelaySeconds: 15
+            periodSeconds: 10
+      volumes:
+        - name: ledger-data
+          persistentVolumeClaim:
+            claimName: {{ .Values.victim.name }}-data

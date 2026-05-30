@@ -1,0 +1,49 @@
+nodeSelector:
+  alertmend-test-node: "true"
+
+imageCredentials:
+  enabled: true
+  secretName: registry-pull-secret
+  registry: incidence.azurecr.io
+  username: ""
+  password: ""
+  email: devops@example.com
+
+culprit:
+  name: invoice-renderer-service
+  image:
+    repository: incidence.azurecr.io/invoice-renderer-service
+    tag: "1.0.0"
+    pullPolicy: Always
+  service:
+    port: 80
+    targetPort: 8080
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: "2"
+      memory: 12Gi
+
+victim:
+  name: payment-ledger-service
+  image:
+    repository: incidence.azurecr.io/payment-ledger-service
+    tag: "1.0.0"
+    pullPolicy: Always
+  service:
+    port: 80
+    targetPort: 8080
+  persistence:
+    enabled: true
+    size: 1Gi
+    storageClassName: ""
+    mountPath: /data
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 256Mi

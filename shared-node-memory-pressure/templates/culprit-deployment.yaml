@@ -1,0 +1,44 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Values.culprit.name }}
+  labels:
+    app: {{ .Values.culprit.name }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: {{ .Values.culprit.name }}
+  template:
+    metadata:
+      labels:
+        app: {{ .Values.culprit.name }}
+        incident-role: culprit
+        incident-type: shared-node-memory-pressure
+    spec:
+      nodeSelector:
+{{ toYaml .Values.nodeSelector | indent 8 }}
+      {{- if .Values.imageCredentials.enabled }}
+      imagePullSecrets:
+        - name: {{ .Values.imageCredentials.secretName }}
+      {{- end }}
+      containers:
+        - name: {{ .Values.culprit.name }}
+          image: "{{ .Values.culprit.image.repository }}:{{ .Values.culprit.image.tag }}"
+          imagePullPolicy: {{ .Values.culprit.image.pullPolicy }}
+          ports:
+            - containerPort: 8080
+          resources:
+{{ toYaml .Values.culprit.resources | indent 12 }}
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            initialDelaySeconds: 15
+            periodSeconds: 10
