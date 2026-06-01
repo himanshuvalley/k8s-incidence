@@ -5,7 +5,12 @@ image:
   tag: "1.0.0"
   pullPolicy: IfNotPresent
 
-imagePullSecrets: []
+imageCredentials:
+  enabled: true
+  registry: incidence.azurecr.io
+  secretName: order-db-connection-pressure-pull-secret
+  username: ""
+  password: ""
 
 service:
   type: LoadBalancer
