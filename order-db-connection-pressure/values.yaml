@@ -1,0 +1,28 @@
+replicaCount: 1
+
+image:
+  repository: incidence.azurecr.io/order-db-connection-pressure
+  tag: "1.0.0"
+  pullPolicy: IfNotPresent
+
+imagePullSecrets: []
+
+service:
+  type: LoadBalancer
+  port: 80
+  targetPort: 8080
+
+env:
+  DB_HOST: ""
+  DB_PORT: "3306"
+  DB_USER: "admin"
+  DB_PASSWORD: ""
+  DB_NAME: "orders_db"
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    cpu: 500m
+    memory: 512Mi

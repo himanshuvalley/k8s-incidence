@@ -1,0 +1,6 @@
+apiVersion: v2
+name: order-db-connection-pressure
+description: Demo Helm chart for simulating RDS database connection exhaustion in an order service
+type: application
+version: 0.1.0
+appVersion: "1.0.0"
