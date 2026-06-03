@@ -25,6 +25,7 @@ culprit:
     limits:
       cpu: "2"
       memory: 12Gi
+      memory: 12Gi
 victim:
   name: payment-ledger-service
   image:
