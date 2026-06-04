@@ -40,12 +40,12 @@ spec:
             initialDelaySeconds: 10
             periodSeconds: 10
 
-          livenessProbe:
-            httpGet:
-              path: /health
-              port: {{ .Values.service.targetPort }}
-            initialDelaySeconds: 20
-            periodSeconds: 20
+          # livenessProbe:
+          #   httpGet:
+          #     path: /health
+          #     port: {{ .Values.service.targetPort }}
+          #   initialDelaySeconds: 20
+          #   periodSeconds: 20
 
           resources:
             {{- toYaml .Values.resources | nindent 12 }}

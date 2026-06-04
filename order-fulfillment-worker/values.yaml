@@ -1,0 +1,46 @@
+replicaCount: 1
+
+image:
+  repository: incidence.azurecr.io/order-fulfillment-worker
+  tag: "1.0.0"
+  pullPolicy: IfNotPresent
+
+service:
+  type: ClusterIP
+  port: 8080
+
+app:
+  serviceName: order-fulfillment-worker
+  releaseVersion: v1.0.0
+  workerEnabled: "true"
+  workerPollInterval: "5"
+  workerBatchSize: "5"
+
+aws:
+  region: ap-south-1
+  sqsQueueUrl: ""
+
+rds:
+  host: ""
+  port: "3306"
+  database: "orders"
+  username: "admin"
+  password: ""
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    cpu: 500m
+    memory: 512Mi
+
+probes:
+  liveness:
+    path: /health
+    initialDelaySeconds: 20
+    periodSeconds: 10
+  readiness:
+    path: /ready
+    initialDelaySeconds: 20
+    periodSeconds: 10

@@ -1,0 +1,6 @@
+apiVersion: v2
+name: order-fulfillment-worker
+description: Production-like SQS worker incident demo for RDS connection limit
+type: application
+version: 1.0.0
+appVersion: "1.0.0"

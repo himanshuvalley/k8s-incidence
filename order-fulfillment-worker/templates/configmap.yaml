@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "order-fulfillment-worker.fullname" . }}-config
+data:
+  SERVICE_NAME: {{ .Values.app.serviceName | quote }}
+  RELEASE_VERSION: {{ .Values.app.releaseVersion | quote }}
+  WORKER_ENABLED: {{ .Values.app.workerEnabled | quote }}
+  WORKER_POLL_INTERVAL: {{ .Values.app.workerPollInterval | quote }}
+  WORKER_BATCH_SIZE: {{ .Values.app.workerBatchSize | quote }}
+  AWS_REGION: {{ .Values.aws.region | quote }}
+  SQS_QUEUE_URL: {{ .Values.aws.sqsQueueUrl | quote }}
+  DB_HOST: {{ .Values.rds.host | quote }}
+  DB_PORT: {{ .Values.rds.port | quote }}
+  DB_NAME: {{ .Values.rds.database | quote }}

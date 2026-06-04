@@ -1,0 +1,49 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "order-fulfillment-worker.fullname" . }}
+  labels:
+    app.kubernetes.io/name: {{ include "order-fulfillment-worker.name" . }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: {{ include "order-fulfillment-worker.name" . }}
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: {{ include "order-fulfillment-worker.name" . }}
+    spec:
+      containers:
+        - name: order-fulfillment-worker
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+
+          ports:
+            - name: http
+              containerPort: 8080
+
+          envFrom:
+            - configMapRef:
+                name: {{ include "order-fulfillment-worker.fullname" . }}-config
+            - secretRef:
+                name: {{ include "order-fulfillment-worker.fullname" . }}-secret
+            - secretRef:
+                name: aws-credentials
+
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+
+          livenessProbe:
+            httpGet:
+              path: {{ .Values.probes.liveness.path }}
+              port: 8080
+            initialDelaySeconds: {{ .Values.probes.liveness.initialDelaySeconds }}
+            periodSeconds: {{ .Values.probes.liveness.periodSeconds }}
+
+          readinessProbe:
+            httpGet:
+              path: {{ .Values.probes.readiness.path }}
+              port: 8080
+            initialDelaySeconds: {{ .Values.probes.readiness.initialDelaySeconds }}
+            periodSeconds: {{ .Values.probes.readiness.periodSeconds }}
