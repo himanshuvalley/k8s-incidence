@@ -19,11 +19,16 @@ DB_CONFIG = {
     "database": os.getenv("DB_NAME"),
     "connection_timeout": 5,
     "autocommit": True,
+    "pool_name": "order_db_pool",
+    "pool_size": 10
 }
+
+# Initialize the connection pool
+connection_pool = pooling.MySQLConnectionPool(**DB_CONFIG)
 
 
 def get_connection():
-    return mysql.connector.connect(**DB_CONFIG)
+    return connection_pool.get_connection()
 
 
 def init_db():
