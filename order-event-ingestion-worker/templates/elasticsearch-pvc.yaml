@@ -1,0 +1,18 @@
+{{- if and .Values.elasticsearch.deployInCluster .Values.elasticsearch.persistence.enabled }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "order-event-ingestion-worker.elasticsearch.fullname" . }}-data
+  labels:
+    app.kubernetes.io/name: {{ include "order-event-ingestion-worker.elasticsearch.fullname" . }}
+    app.kubernetes.io/component: elasticsearch
+spec:
+  accessModes:
+    - ReadWriteOnce
+  {{- if .Values.elasticsearch.persistence.storageClassName }}
+  storageClassName: {{ .Values.elasticsearch.persistence.storageClassName }}
+  {{- end }}
+  resources:
+    requests:
+      storage: {{ .Values.elasticsearch.persistence.size }}
+{{- end }}

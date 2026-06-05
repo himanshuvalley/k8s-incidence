@@ -1,0 +1,22 @@
+{{- if .Values.elasticsearch.deployInCluster }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "order-event-ingestion-worker.elasticsearch.fullname" . }}
+  labels:
+    app.kubernetes.io/name: {{ include "order-event-ingestion-worker.elasticsearch.fullname" . }}
+    app.kubernetes.io/component: elasticsearch
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: {{ include "order-event-ingestion-worker.elasticsearch.fullname" . }}
+  ports:
+    - name: http
+      port: {{ .Values.elasticsearch.port }}
+      targetPort: 9200
+      protocol: TCP
+    - name: transport
+      port: 9300
+      targetPort: 9300
+      protocol: TCP
+{{- end }}
