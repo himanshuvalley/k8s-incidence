@@ -218,13 +218,36 @@ Wait until worker drains messages (queue should go down). Then enqueue again bef
 
 # Test Case 1 — RDS Connection Limit
 
-## Trigger
+## Trigger (order matters)
+
+**Pehle pressure start karo, phir messages enqueue karo.**
 
 ```bash
-curl "http://localhost:8080/simulate/rds-connection-pressure?connections=100&holdSeconds=300"
+# Step 1: RDS connections hold karo (poora 300 sec tak)
+curl "http://localhost:8080/simulate/rds-connection-pressure?connections=80&holdSeconds=300&rampDelay=0.1"
+
+# Step 2: 10-15 sec wait karo, phir verify karo connections hold ho rahi hain
+sleep 15
+curl "http://localhost:8080/simulate/rds-pressure-status"
 ```
 
-This opens 100 RDS connections and holds them for 300 seconds.
+Expected status:
+
+```json
+{
+  "held_connection_count": 75,
+  "held_connections": [{"mysql_connection_id": 123, "held_for_seconds": 12.5}]
+}
+```
+
+> `held_connection_count` kam se kam 50+ hona chahiye. Agar 0 ya bahut kam hai to pressure hold nahi ho rahi.
+
+```bash
+# Step 3: Ab messages enqueue karo
+curl -X POST "http://localhost:8080/simulate/enqueue?count=150"
+```
+
+This opens many RDS connections and holds them for the full hold period (no early timeout).
 
 ## Verify
 

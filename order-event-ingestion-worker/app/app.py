@@ -101,6 +101,7 @@ worker_running = Gauge(
 sqs = boto3.client("sqs", region_name=AWS_REGION)
 
 held_rds_connections = []
+held_rds_lock = threading.Lock()
 stop_event = threading.Event()
 es_write_blocked = threading.Event()
 es_pressure_stop = threading.Event()
@@ -138,6 +139,21 @@ def get_db_connection():
         connect_timeout=5,
         read_timeout=10,
         write_timeout=10,
+        autocommit=True
+    )
+
+
+def get_pressure_db_connection():
+    """Long-lived connections for RDS exhaustion simulation."""
+    return pymysql.connect(
+        host=DB_HOST,
+        port=DB_PORT,
+        user=DB_USER,
+        password=DB_PASSWORD,
+        database=DB_NAME,
+        connect_timeout=10,
+        read_timeout=30,
+        write_timeout=30,
         autocommit=True
     )
 
@@ -518,19 +534,41 @@ def simulate_enqueue():
 def simulate_rds_connection_pressure():
     connections = int(request.args.get("connections", "100"))
     hold_seconds = int(request.args.get("holdSeconds", "300"))
+    ramp_delay = float(request.args.get("rampDelay", "0.1"))
 
     def hold_connection(index):
         conn = None
         try:
-            conn = get_db_connection()
-            held_rds_connections.append(conn)
-            rds_pressure_connections.set(len(held_rds_connections))
-            logging.warning(
-                "Holding RDS connection %s/%s for %ss",
-                index, connections, hold_seconds
-            )
+            conn = get_pressure_db_connection()
+
             with conn.cursor() as cursor:
-                cursor.execute(f"SELECT SLEEP({hold_seconds})")
+                cursor.execute("SELECT CONNECTION_ID()")
+                connection_id = cursor.fetchone()[0]
+
+            with held_rds_lock:
+                held_rds_connections.append({
+                    "conn": conn,
+                    "connection_id": connection_id,
+                    "opened_at": time.time(),
+                })
+                rds_pressure_connections.set(len(held_rds_connections))
+
+            logging.warning(
+                "Holding RDS pressure connection %s/%s mysql_id=%s for %ss",
+                index, connections, connection_id, hold_seconds
+            )
+
+            deadline = time.time() + hold_seconds
+            while time.time() < deadline and not stop_event.is_set():
+                with conn.cursor() as cursor:
+                    cursor.execute("SELECT 1")
+                time.sleep(5)
+
+            logging.warning(
+                "RDS pressure connection %s mysql_id=%s hold period completed",
+                index, connection_id
+            )
+
         except Exception as e:
             logging.error("RDS pressure connection %s failed: %s", index, e)
         finally:
@@ -539,9 +577,13 @@ def simulate_rds_connection_pressure():
                     conn.close()
             except Exception:
                 pass
-            if conn in held_rds_connections:
-                held_rds_connections.remove(conn)
-            rds_pressure_connections.set(len(held_rds_connections))
+
+            with held_rds_lock:
+                held_rds_connections[:] = [
+                    item for item in held_rds_connections
+                    if item.get("conn") is not conn
+                ]
+                rds_pressure_connections.set(len(held_rds_connections))
 
     for i in range(connections):
         threading.Thread(
@@ -549,27 +591,52 @@ def simulate_rds_connection_pressure():
             args=(i + 1,),
             daemon=True
         ).start()
-        time.sleep(0.05)
+        time.sleep(ramp_delay)
 
     return jsonify({
         "status": "started",
         "failure_case": "rds_connection_limit",
         "connections_requested": connections,
-        "hold_seconds": hold_seconds
+        "hold_seconds": hold_seconds,
+        "ramp_delay_seconds": ramp_delay,
+        "note": "Check /simulate/rds-pressure-status for active held connections"
+    })
+
+
+@app.route("/simulate/rds-pressure-status", methods=["GET"])
+def rds_pressure_status():
+    active = []
+
+    with held_rds_lock:
+        for item in held_rds_connections:
+            active.append({
+                "mysql_connection_id": item["connection_id"],
+                "held_for_seconds": round(time.time() - item["opened_at"], 2)
+            })
+        held_count = len(held_rds_connections)
+
+    return jsonify({
+        "held_connection_count": held_count,
+        "held_connections": active[:20],
+        "note": "Only first 20 connections are shown"
     })
 
 
 @app.route("/simulate/release-rds-pressure", methods=["GET", "POST"])
 def release_rds_pressure():
     released = 0
-    for conn in list(held_rds_connections):
-        try:
-            conn.close()
-            released += 1
-        except Exception:
-            pass
-    held_rds_connections.clear()
-    rds_pressure_connections.set(0)
+
+    with held_rds_lock:
+        while held_rds_connections:
+            item = held_rds_connections.pop()
+            try:
+                item["conn"].close()
+                released += 1
+            except Exception:
+                pass
+
+        rds_pressure_connections.set(0)
+
     return jsonify({"status": "released", "released_connections": released})
 
 
