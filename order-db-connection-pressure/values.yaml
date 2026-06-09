@@ -23,6 +23,7 @@ env:
   DB_USER: "admin"
   DB_PASSWORD: ""
   DB_NAME: "orders_db"
+  MAX_CONNECTIONS: "100"
 
 resources:
   requests:
