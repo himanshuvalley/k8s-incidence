@@ -59,9 +59,9 @@ elasticsearch:
       cpu: "1"
       memory: 2Gi
   persistence:
-    enabled: false
+    enabled: true
     size: 5Gi
-    storageClassName: ""
+    storageClassName: "standard"
 
 resources:
   requests:
