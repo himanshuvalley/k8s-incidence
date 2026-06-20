@@ -24,7 +24,7 @@ service:
 persistence:
   enabled: true
   storageClassName: ""
-  size: 1Gi
+  size: 5Gi
   mountPath: /data
 
 resources:
