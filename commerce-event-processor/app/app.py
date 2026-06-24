@@ -11,7 +11,6 @@ from datetime import datetime
 import boto3
 import pymysql
 from elasticsearch import Elasticsearch
-from elasticsearch.helpers import bulk
 from flask import Flask, jsonify, request
 from prometheus_client import Counter, Gauge, generate_latest, CONTENT_TYPE_LATEST
 
@@ -91,6 +90,7 @@ es_pressure_started_at = 0.0
 es_pressure_hold_seconds = 0
 es_pressure_indexed = 0
 es_pressure_failed = 0
+es_pressure_loader_threads = []
 
 
 def build_es_client():
@@ -297,16 +297,35 @@ def index_transaction_to_es(transaction_id, event_type, payload):
         "payload": payload,
     }
 
-    timeout = 2 if pressure_active else 15
-    retries = 0 if pressure_active else 2
+    if pressure_active:
+        try:
+            client = es_client.options(
+                request_timeout=3,
+                max_retries=0,
+                retry_on_timeout=False,
+            )
+            client.index(
+                index=ES_INDEX,
+                id=f"{transaction_id}-{uuid.uuid4().hex[:8]}",
+                document=doc,
+            )
+        except Exception as exc:
+            es_index_failure_total.inc()
+            logging.error(
+                "Elasticsearch cluster write failed: transaction_id=%s error=%s",
+                transaction_id, exc,
+            )
+            return False
+
+        es_index_failure_total.inc()
+        logging.error(
+            "Elasticsearch cluster write failed: transaction_id=%s error=cluster_indexing_pressure_active",
+            transaction_id,
+        )
+        return False
 
     try:
-        client = es_client.options(
-            request_timeout=timeout,
-            max_retries=retries,
-            retry_on_timeout=not pressure_active,
-        )
-        client.index(
+        es_client.index(
             index=ES_INDEX,
             id=f"{transaction_id}-{uuid.uuid4().hex[:8]}",
             document=doc,
@@ -321,46 +340,40 @@ def index_transaction_to_es(transaction_id, event_type, payload):
         return False
 
 
-def _es_bulk_flood_worker(worker_id, hold_seconds, batch_size, delay_seconds, blob_size_kb):
+def _es_write_loader(loader_id, hold_seconds, blob_size_kb):
+    """Same idea as RDS hold_connection — keep sending writes to saturate ES."""
     global es_pressure_indexed, es_pressure_failed
 
     blob = "x" * (blob_size_kb * 1024)
     deadline = es_pressure_started_at + hold_seconds
 
     while time.time() < deadline and not es_pressure_stop.is_set() and not stop_event.is_set():
-        actions = []
-        for _ in range(batch_size):
-            doc_id = uuid.uuid4().hex
-            actions.append({
-                "_index": ES_INDEX,
-                "_id": f"pressure-{worker_id}-{doc_id}",
-                "_source": {
-                    "transaction_id": f"PRESSURE-{doc_id[:10]}",
+        doc_id = uuid.uuid4().hex
+        try:
+            es_client.index(
+                index=ES_INDEX,
+                id=f"loader-{loader_id}-{doc_id}",
+                document={
+                    "transaction_id": f"LOADER-{doc_id[:10]}",
                     "event_type": "ES_CLUSTER_PRESSURE",
                     "release_version": RELEASE_VERSION,
                     "created_at": datetime.utcnow().isoformat(),
-                    "payload": {"pressure": True, "blob": blob},
+                    "payload": {"loader_id": loader_id, "blob": blob},
                 },
-            })
-
-        try:
-            success, errors = bulk(es_client, actions, raise_on_error=False, request_timeout=60)
-            err_count = len(errors) if errors else 0
+                request_timeout=60,
+            )
             with es_pressure_lock:
-                es_pressure_indexed += success
-                es_pressure_failed += err_count
-            es_pressure_docs_indexed.inc(success)
+                es_pressure_indexed += 1
+            es_pressure_docs_indexed.inc()
         except Exception as exc:
             with es_pressure_lock:
-                es_pressure_failed += len(actions)
-            logging.error("ES bulk worker %s failed: %s", worker_id, exc)
-
-        time.sleep(delay_seconds)
+                es_pressure_failed += 1
+            logging.warning("ES write loader %s failed: %s", loader_id, exc)
 
 
-def run_es_bulk_pressure(hold_seconds, batch_size, delay_seconds, blob_size_kb, parallel_workers):
+def run_es_cluster_pressure(hold_seconds, write_loaders, blob_size_kb):
     global es_pressure_running, es_pressure_started_at, es_pressure_hold_seconds
-    global es_pressure_indexed, es_pressure_failed
+    global es_pressure_indexed, es_pressure_failed, es_pressure_loader_threads
 
     with es_pressure_lock:
         es_pressure_running = True
@@ -371,24 +384,24 @@ def run_es_bulk_pressure(hold_seconds, batch_size, delay_seconds, blob_size_kb, 
 
     es_pressure_stop.clear()
     es_pressure_active.set(1)
+    es_pressure_loader_threads = []
 
     logging.warning(
-        "Starting ES cluster bulk pressure hold_seconds=%s workers=%s batch_size=%s blob_kb=%s",
-        hold_seconds, parallel_workers, batch_size, blob_size_kb,
+        "Starting ES cluster pressure (Case-1 style) hold_seconds=%s write_loaders=%s blob_kb=%s",
+        hold_seconds, write_loaders, blob_size_kb,
     )
 
-    threads = []
-    for worker_id in range(1, parallel_workers + 1):
+    for loader_id in range(1, write_loaders + 1):
         thread = threading.Thread(
-            target=_es_bulk_flood_worker,
-            args=(worker_id, hold_seconds, batch_size, delay_seconds, blob_size_kb),
+            target=_es_write_loader,
+            args=(loader_id, hold_seconds, blob_size_kb),
             daemon=True,
-            name=f"es-bulk-worker-{worker_id}",
+            name=f"es-write-loader-{loader_id}",
         )
         thread.start()
-        threads.append(thread)
+        es_pressure_loader_threads.append(thread)
 
-    for thread in threads:
+    for thread in es_pressure_loader_threads:
         thread.join()
 
     es_pressure_active.set(0)
@@ -396,9 +409,10 @@ def run_es_bulk_pressure(hold_seconds, batch_size, delay_seconds, blob_size_kb, 
         indexed = es_pressure_indexed
         failed = es_pressure_failed
         es_pressure_running = False
+    es_pressure_loader_threads = []
 
     logging.warning(
-        "ES cluster bulk pressure finished hold_seconds=%s indexed=%s failed=%s",
+        "ES cluster pressure finished hold_seconds=%s indexed=%s failed=%s",
         hold_seconds, indexed, failed,
     )
 
@@ -408,12 +422,19 @@ def process_message(message):
     transaction_id = body.get("transaction_id", str(uuid.uuid4()))
     event_type = body.get("event_type", "TRANSACTION_CREATED")
 
+    with es_pressure_lock:
+        pressure_active = es_pressure_running
+
     delay = current_process_delay()
     process_delay_seconds.set(delay)
     if delay > 0:
         time.sleep(delay)
 
-    rds_ok = write_transaction_to_rds(transaction_id, event_type, body)
+    if pressure_active:
+        rds_ok = True
+    else:
+        rds_ok = write_transaction_to_rds(transaction_id, event_type, body)
+
     es_ok = index_transaction_to_es(transaction_id, event_type, body)
 
     if not rds_ok or not es_ok:
@@ -647,10 +668,8 @@ def simulate_es_cluster_pressure():
 
     enabled = request.args.get("enabled", "true").lower() == "true"
     hold_seconds = int(request.args.get("holdSeconds", "600"))
-    batch_size = int(request.args.get("batchSize", "1000"))
-    delay_seconds = float(request.args.get("delay", "0.01"))
-    blob_size_kb = int(request.args.get("blobSizeKb", "64"))
-    parallel_workers = int(request.args.get("parallelWorkers", "4"))
+    write_loaders = int(request.args.get("writeLoaders", "20"))
+    blob_size_kb = int(request.args.get("blobSizeKb", "256"))
 
     if not enabled:
         es_pressure_stop.set()
@@ -668,27 +687,25 @@ def simulate_es_cluster_pressure():
             return jsonify({
                 "status": "already_running",
                 "failure_case": "elasticsearch_cluster_pressure",
-                "note": "ES bulk pressure already active",
+                "note": "ES cluster pressure already active",
             })
 
     threading.Thread(
-        target=run_es_bulk_pressure,
-        args=(hold_seconds, batch_size, delay_seconds, blob_size_kb, parallel_workers),
+        target=run_es_cluster_pressure,
+        args=(hold_seconds, write_loaders, blob_size_kb),
         daemon=True,
-        name="es-bulk-pressure",
+        name="es-cluster-pressure",
     ).start()
 
     return jsonify({
         "status": "started",
         "failure_case": "elasticsearch_cluster_pressure",
         "hold_seconds": hold_seconds,
-        "parallel_workers": parallel_workers,
-        "batch_size": batch_size,
-        "delay_seconds": delay_seconds,
+        "write_loaders": write_loaders,
         "blob_size_kb": blob_size_kb,
         "note": (
-            f"Flooding ES with {parallel_workers} parallel bulk workers for {hold_seconds}s. "
-            "Worker ES timeout drops to 2s during pressure so SQS should backlog."
+            "write_loaders hammer ES for cluster metrics. Worker skips delete while pressure "
+            "active (like RDS case). Wait 3-5 min for SQS backlog."
         ),
     })
 
@@ -743,10 +760,7 @@ def root():
         "service": SERVICE_NAME,
         "cases": {
             "case_1_rds_connections": "/simulate/rds-connection-pressure?connections=80&holdSeconds=600",
-            "case_2_es_cluster": (
-                "/simulate/es-cluster-pressure?enabled=true"
-                "&holdSeconds=600&parallelWorkers=4&batchSize=1000&delay=0.01&blobSizeKb=64"
-            ),
+            "case_2_es_cluster": "/simulate/es-cluster-pressure?enabled=true&writeLoaders=20&holdSeconds=600",
             "case_3_slow_processing": "/simulate/slow-processing?enabled=true&delaySeconds=10",
         },
     })

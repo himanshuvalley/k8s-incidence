@@ -46,7 +46,7 @@ Normal state: produce rate ≈ process rate → **SQS backlog stable (~0)**
 | Case | Trigger | What breaks | SQS metric | Logs (clean) |
 |------|---------|-------------|------------|--------------|
 | **1** | External RDS connection pressure | RDS too many connections | Visible or NotVisible > 100 | `RDS too many connections` only |
-| **2** | ES cluster pressure | ES write fails on 3-node cluster | NotVisible > 100 | `Elasticsearch cluster write failed` only |
+| **2** | ES cluster pressure | ES write fails on 3-node cluster | Visible or NotVisible > 100 | `Elasticsearch cluster write failed` only |
 | **3** | Slow message processing | 10 sec/message vs 60/min incoming | Visible > 100 | No crash, no 503 — backlog grows naturally |
 
 > Case 3 mein **manual enqueue nahi** — app khud 60/min produce karta hai, slow processing se backlog badhta hai.
@@ -300,63 +300,39 @@ curl "http://localhost:8080/simulate/release-rds-pressure"
 
 ## What happens
 
-App floods the **3-node ES cluster** with heavy bulk indexing (large docs, high rate).
-ES JVM heap and CPU spike → worker index writes timeout/reject → messages stay in SQS.
+**Do cheezein ek saath:**
 
-**Important:** This hits the real ES cluster — ES metrics WILL change (unlike app-only block).
+1. **write_loaders** → ES cluster pe real indexing load (71k+ docs, metrics ke liye)
+2. **Worker ES fail** jab pressure active → message delete nahi hota → SQS backlog (Case 1 jaisa)
+
+Tumhare logs mein sab `status:201` tha — worker bhi succeed ho raha tha, isliye SQS 0 thi. Ab worker pressure ke dauran message delete nahi karega.
 
 ## Trigger
 
 ```bash
-curl "http://localhost:8080/simulate/es-cluster-pressure?enabled=true&holdSeconds=600&parallelWorkers=4&batchSize=1000&delay=0.01&blobSizeKb=64"
+curl "http://localhost:8080/simulate/es-cluster-pressure?enabled=true&writeLoaders=20&holdSeconds=600&blobSizeKb=256"
 ```
 
-Default **600 seconds (10 min)** tak ES cluster pe 4 parallel bulk workers se heavy load chalega.
-Worker ES timeout pressure ke dauran **2s** ho jata hai aur batch size **10** + visibility **300s** — isse `NotVisible` > 100 build hona chahiye.
-
-Monitor ES pressure:
-
-```bash
-curl "http://localhost:8080/simulate/es-pressure-status"
-```
-
-Expected while running:
-```json
-{
-  "es_pressure_active": true,
-  "hold_seconds": 600,
-  "elapsed_seconds": 120.5,
-  "remaining_seconds": 479.5,
-  "docs_indexed": 45000,
-  "docs_failed": 120
-}
-```
-
-Monitor ES cluster JVM/CPU on EC2 nodes:
-
-```bash
-curl "http://ES_NODE1_PUBLIC_IP:9200/_nodes/stats/jvm,process,thread_pool?pretty"
-curl "http://ES_NODE1_PUBLIC_IP:9200/_cluster/health?pretty"
-```
-
-## Expected ES metrics impact
-
-| ES Metric | Expected |
-|-----------|----------|
-| `jvm.mem.heap_used_percent` | **↑ 80-95%** |
-| `process.cpu.percent` | **↑ High** |
-| `thread_pool.write.rejected` | **↑ Increasing** |
-| `cluster.health` | `yellow` or `red` |
-| `indexing.index_total` rate | Very high (bulk flood) |
-
-## Expected logs
+## Expected logs (clean — only ES errors)
 
 ```text
-ERROR Elasticsearch cluster write failed: transaction_id=TXN-xxx error=ConnectionTimeout(...)
-ERROR Elasticsearch cluster write failed: transaction_id=TXN-xxx error=RejectedExecutionException(...)
+ERROR Elasticsearch cluster write failed: transaction_id=TXN-xxx error=cluster_indexing_pressure_active
 ```
 
-No RDS errors, no 503, no crash.
+Loaders ke logs mein `status:201` normal hai — wo ES load ke liye hain.
+
+## Expected ES metrics (ES node pe check karo, pod pe nahi)
+
+```bash
+curl "http://ES_NODE1_PUBLIC_IP:9200/_nodes/stats/jvm,process,indexing?pretty"
+curl "http://ES_NODE1_PUBLIC_IP:9200/_cat/thread_pool/write?v&h=node_name,active,queue,rejected"
+```
+
+| Metric | Expected |
+|--------|----------|
+| `jvm.mem.heap_used_percent` | **↑ 70%+** |
+| `indexing.index_total` rate | **↑ High** |
+| `thread_pool.write.rejected` | **↑ Increasing** |
 
 ## Expected SQS
 
@@ -366,28 +342,21 @@ aws sqs get-queue-attributes --queue-url "YOUR_QUEUE_URL" --attribute-names All
 
 | Metric | Expected |
 |--------|----------|
-| `ApproximateNumberOfMessages` | 0 or low |
-| `ApproximateNumberOfMessagesNotVisible` | > 100 |
+| `ApproximateNumberOfMessages` | > 100 (visible backlog) |
+| `ApproximateNumberOfMessagesNotVisible` | may also increase |
 
 ## Alert
 
 ```text
-Name:      sqsInFlightMessagesExceedingProcessingThreshold
-Query:     max(aws_sqs_approximate_number_of_messages_not_visible_average{dimension_queue_name="commerce-event-queue"})
+Name:      sqsVisibleMessagesExceedingProcessingThreshold  (or universal backlog alert)
 Condition: > 100 for 5m
-```
-
-## Expected RCA
-
-```text
-SQS backlog increased because commerce-event-processor could not index events to Elasticsearch.
-Elasticsearch cluster was under resource pressure (high JVM heap / CPU / write rejections).
 ```
 
 ## Recovery
 
 ```bash
 curl "http://localhost:8080/simulate/es-cluster-pressure?enabled=false"
+# optional: aws sqs purge-queue --queue-url "YOUR_QUEUE_URL"
 ```
 
 Wait for ES JVM/CPU to settle (~5-10 min on small EC2 nodes).
@@ -468,7 +437,7 @@ curl "http://localhost:8080/simulate/slow-processing?enabled=false"
 | Case | Alert name | Primary metric |
 |------|-----------|----------------|
 | 1 — RDS connections | `sqsVisibleMessagesExceedingProcessingThreshold` | Visible > 100 |
-| 2 — ES cluster | `sqsInFlightMessagesExceedingProcessingThreshold` | NotVisible > 100 |
+| 2 — ES cluster | `sqsVisibleMessagesExceedingProcessingThreshold` or backlog alert | Visible or NotVisible > 100 |
 | 3 — Slow processing | `sqsVisibleMessagesExceedingProcessingThreshold` | Visible > 100 |
 
 **Universal (covers all 3):**
