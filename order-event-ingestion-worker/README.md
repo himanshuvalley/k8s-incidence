@@ -209,8 +209,10 @@ Verify queue:
 ```bash
 aws sqs get-queue-attributes \
   --queue-url "https://sqs.ap-south-1.amazonaws.com/ACCOUNT_ID/order-event-ingestion-queue" \
-  --attribute-names ApproximateNumberOfMessages ApproximateAgeOfOldestMessage
+  --attribute-names All
 ```
+
+Look at `ApproximateNumberOfMessages` and `ApproximateNumberOfMessagesNotVisible`.
 
 Wait until worker drains messages (queue should go down). Then enqueue again before each failure test.
 
@@ -276,10 +278,10 @@ Check SQS backlog:
 ```bash
 aws sqs get-queue-attributes \
   --queue-url "YOUR_QUEUE_URL" \
-  --attribute-names ApproximateNumberOfMessages
+  --attribute-names All
 ```
 
-Expected: `ApproximateNumberOfMessages > 100`
+Expected: `ApproximateNumberOfMessages > 100` (RDS fail slow hai, visible backlog build hota hai)
 
 ## Expected RCA
 
@@ -337,10 +339,17 @@ Check SQS:
 ```bash
 aws sqs get-queue-attributes \
   --queue-url "YOUR_QUEUE_URL" \
-  --attribute-names ApproximateNumberOfMessages ApproximateAgeOfOldestMessage
+  --attribute-names All
 ```
 
-Expected: backlog > 100 and age increasing.
+Expected for Case 2:
+
+```text
+ApproximateNumberOfMessages:           0 or low
+ApproximateNumberOfMessagesNotVisible: > 100
+```
+
+> Case 2 mein worker messages turant pull karke invisible kar deta hai, isliye **NotVisible** check karna zaroori hai — sirf `ApproximateNumberOfMessages` dekhoge to 0 dikhega (ye normal hai).
 
 Check metrics:
 
@@ -444,10 +453,10 @@ Check SQS backlog:
 ```bash
 aws sqs get-queue-attributes \
   --queue-url "YOUR_QUEUE_URL" \
-  --attribute-names ApproximateNumberOfMessages
+  --attribute-names All
 ```
 
-Expected: > 100 and not decreasing.
+Expected: `ApproximateNumberOfMessages > 100` and not decreasing.
 
 ## Expected RCA
 

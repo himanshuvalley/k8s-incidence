@@ -1,0 +1,21 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "commerce-event-processor.fullname" . }}-config
+data:
+  SERVICE_NAME: {{ .Values.app.serviceName | quote }}
+  RELEASE_VERSION: {{ .Values.app.releaseVersion | quote }}
+  WORKER_ENABLED: {{ .Values.app.workerEnabled | quote }}
+  WORKER_BATCH_SIZE: {{ .Values.app.workerBatchSize | quote }}
+  PRODUCER_ENABLED: {{ .Values.app.producerEnabled | quote }}
+  PRODUCER_MESSAGES_PER_MINUTE: {{ .Values.app.producerMessagesPerMinute | quote }}
+  NORMAL_PROCESS_DELAY_SECONDS: {{ .Values.app.normalProcessDelaySeconds | quote }}
+  DEPENDENCY_WAIT_SECONDS: {{ .Values.app.dependencyWaitSeconds | quote }}
+  DEPENDENCY_WAIT_INTERVAL: {{ .Values.app.dependencyWaitInterval | quote }}
+  AWS_REGION: {{ .Values.aws.region | quote }}
+  SQS_QUEUE_URL: {{ .Values.aws.sqsQueueUrl | quote }}
+  DB_HOST: {{ .Values.rds.host | quote }}
+  DB_PORT: {{ .Values.rds.port | quote }}
+  DB_NAME: {{ .Values.rds.database | quote }}
+  ES_HOSTS: {{ include "commerce-event-processor.esHosts" . | quote }}
+  ES_INDEX: {{ .Values.elasticsearch.index | quote }}

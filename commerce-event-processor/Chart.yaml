@@ -1,0 +1,6 @@
+apiVersion: v2
+name: commerce-event-processor
+description: Commerce event processor with RDS, 3-node ES cluster, and SQS pipeline
+type: application
+version: 1.0.0
+appVersion: "1.0.0"
