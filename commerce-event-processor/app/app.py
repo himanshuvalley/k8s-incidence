@@ -83,6 +83,9 @@ slow_processing_enabled = False
 slow_processing_delay = 10.0
 processing_lock = threading.Lock()
 
+producer_paused = False
+producer_pause_lock = threading.Lock()
+
 es_pressure_stop = threading.Event()
 es_pressure_running = False
 es_pressure_lock = threading.Lock()
@@ -418,6 +421,7 @@ def run_es_cluster_pressure(hold_seconds, write_loaders, blob_size_kb):
 
 
 def process_message(message):
+    started_at = time.time()
     body = json.loads(message.get("Body", "{}"))
     transaction_id = body.get("transaction_id", str(uuid.uuid4()))
     event_type = body.get("event_type", "TRANSACTION_CREATED")
@@ -427,7 +431,12 @@ def process_message(message):
 
     delay = current_process_delay()
     process_delay_seconds.set(delay)
-    if delay > 0:
+
+    with processing_lock:
+        slow_case_active = slow_processing_enabled
+
+    # Case 3: fixed slow delay before work. Normal mode: pace to 1 msg/sec total (after RDS+ES).
+    if slow_case_active and delay > 0:
         time.sleep(delay)
 
     if pressure_active:
@@ -443,6 +452,13 @@ def process_message(message):
 
     sqs.delete_message(QueueUrl=SQS_QUEUE_URL, ReceiptHandle=message["ReceiptHandle"])
     sqs_processed_total.inc()
+
+    if not slow_case_active and delay > 0:
+        elapsed = time.time() - started_at
+        remaining = delay - elapsed
+        if remaining > 0:
+            time.sleep(remaining)
+
     return True
 
 
@@ -470,6 +486,11 @@ def producer_loop():
         if not dependencies_ready:
             time.sleep(2)
             continue
+
+        with producer_pause_lock:
+            if producer_paused:
+                time.sleep(1)
+                continue
 
         payload = {
             "transaction_id": f"TXN-{uuid.uuid4().hex[:10]}",
@@ -751,6 +772,46 @@ def simulate_slow_processing():
         "process_delay_seconds": delay if enabled else NORMAL_PROCESS_DELAY_SECONDS,
         "producer_rate_per_minute": PRODUCER_MESSAGES_PER_MINUTE,
         "note": "Producer keeps sending 60/min. Backlog grows when delay > 1 sec/msg.",
+    })
+
+
+@app.route("/simulate/producer", methods=["GET", "POST"])
+def simulate_producer():
+    global producer_paused
+
+    enabled = request.args.get("enabled", "true").lower() == "true"
+    with producer_pause_lock:
+        producer_paused = not enabled
+
+    return jsonify({
+        "status": "updated",
+        "producer_enabled": enabled,
+        "producer_rate_per_minute": PRODUCER_MESSAGES_PER_MINUTE if enabled else 0,
+        "note": "Use enabled=false to pause SQS producer when no test is running.",
+    })
+
+
+@app.route("/simulate/status", methods=["GET"])
+def simulate_status():
+    with held_rds_lock:
+        rds_held = len(held_rds_connections)
+    with es_pressure_lock:
+        es_active = es_pressure_running
+    with processing_lock:
+        slow_active = slow_processing_enabled
+        slow_delay = slow_processing_delay
+    with producer_pause_lock:
+        producer_on = not producer_paused
+
+    return jsonify({
+        "case_1_rds_pressure": rds_held > 0,
+        "rds_held_connections": rds_held,
+        "case_2_es_pressure": es_active,
+        "case_3_slow_processing": slow_active,
+        "process_delay_seconds": slow_delay if slow_active else NORMAL_PROCESS_DELAY_SECONDS,
+        "producer_paused": not producer_on,
+        "producer_rate_per_minute": PRODUCER_MESSAGES_PER_MINUTE if producer_on else 0,
+        "note": "All false + producer on = normal steady state (queue should stay ~0).",
     })
 
 

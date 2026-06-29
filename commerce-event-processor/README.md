@@ -34,7 +34,7 @@ Production-style incident scenario for AlertMend RCA testing.
 | Setting | Value |
 |---------|-------|
 | SQS produce rate | **60 messages/minute** (1 per second) |
-| Normal process rate | **1 message/second** (1 sec delay per message) |
+| Normal process rate | **1 message/second total** (RDS+ES included, not extra 1s sleep) |
 | Flow | Producer → SQS → Worker → RDS + ES → delete from SQS |
 
 Normal state: produce rate ≈ process rate → **SQS backlog stable (~0)**
@@ -239,6 +239,18 @@ aws sqs get-queue-attributes \
   --attribute-names All
 ```
 
+Check no case is active:
+
+```bash
+curl http://localhost:8080/simulate/status | jq .
+```
+
+Pause producer when not testing (optional — stops queue from filling):
+
+```bash
+curl "http://localhost:8080/simulate/producer?enabled=false"
+```
+
 ---
 
 # Test Case 1 — RDS Too Many Connections
@@ -319,7 +331,7 @@ curl "http://localhost:8080/simulate/es-cluster-pressure?enabled=true&writeLoade
 ERROR Elasticsearch cluster write failed: transaction_id=TXN-xxx error=cluster_indexing_pressure_active
 ```
 
-Loaders ke logs mein `status:201` normal hai — wo ES load ke liye hain.
+Loaders  ke logs mein `status:201` normal hai — wo ES load ke liye hain.
 
 ## Expected ES metrics (ES node pe check karo, pod pe nahi)
 
