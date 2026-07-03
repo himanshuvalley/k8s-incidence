@@ -1,0 +1,15 @@
+{{- if .Values.db.storage }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "alertmend-portal.db.fullname" . }}
+  labels:
+    {{- include "alertmend-portal.labels" . | nindent 4 }}
+    app.kubernetes.io/component: db
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: {{ .Values.db.storage }}
+{{- end }}

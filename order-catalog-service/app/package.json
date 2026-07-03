@@ -1,0 +1,24 @@
+{
+  "name": "trace-test-api",
+  "version": "1.0.0",
+  "description": "Node.js API server for testing traces, status codes, and MongoDB query timing",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "node --watch src/index.js",
+    "seed": "node src/seed.js",
+    "start:memory": "USE_MEMORY_DB=true node src/index.js",
+    "seed:memory": "USE_MEMORY_DB=true node src/seed.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "dotenv": "^16.4.7",
+    "express": "^4.21.2",
+    "bcryptjs": "^2.4.3",
+    "jsonwebtoken": "^9.0.2",
+    "mongoose": "^8.9.3",
+    "mongodb-memory-server": "^10.1.4"
+  }
+}

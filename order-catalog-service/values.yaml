@@ -1,0 +1,39 @@
+nameOverride: ""
+fullnameOverride: order-catalog-service
+
+global:
+  imagePullPolicy: Always
+
+imageCredentials:
+  enabled: true
+  create: true
+  registry: incidence.azurecr.io
+  secretName: order-catalog-service-acr-secret
+  username: ""
+  password: ""
+  email: devops@example.com
+
+mongodb:
+  image:
+    repository: mongo
+    tag: "7"
+  port: 27017
+  database: order_catalog_db
+  storage: 2Gi
+  resources:
+    requests: { cpu: 100m, memory: 256Mi }
+    limits: { cpu: 500m, memory: 512Mi }
+
+server:
+  replicaCount: 1
+  image:
+    repository: incidence.azurecr.io/order-catalog-service
+    tag: "1.0.0"
+  port: 3000
+  service:
+    type: LoadBalancer
+  jwtSecret: order-catalog-jwt-secret
+  jwtExpiresIn: 24h
+  resources:
+    requests: { cpu: 100m, memory: 128Mi }
+    limits: { cpu: 500m, memory: 512Mi }

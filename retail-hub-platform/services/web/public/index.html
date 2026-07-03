@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Retail Hub Platform</title>
+  <style>
+    :root {
+      --bg: #080c14; --surface: #111827; --border: #1f2937;
+      --text: #f1f5f9; --muted: #94a3b8; --accent: #6366f1;
+      --slow: #ef4444; --fast: #22c55e; --warn: #f59e0b;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: "Inter", system-ui, sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
+    header {
+      padding: 1.25rem 2rem; background: var(--surface); border-bottom: 1px solid var(--border);
+      display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem;
+    }
+    h1 { font-size: 1.35rem; }
+    .sub { color: var(--muted); font-size: 0.85rem; margin-top: 0.2rem; }
+    .btn {
+      padding: 0.6rem 1.1rem; background: var(--accent); color: white; border: none;
+      border-radius: 8px; font-weight: 600; cursor: pointer;
+    }
+    .btn:hover { opacity: 0.9; }
+    .btn:disabled { opacity: 0.5; cursor: wait; }
+    main { max-width: 1200px; margin: 0 auto; padding: 1.5rem 2rem 3rem; }
+    .arch {
+      display: grid; grid-template-columns: repeat(8, 1fr); gap: 0.5rem;
+      align-items: center; margin-bottom: 1.5rem; font-size: 0.75rem; text-align: center;
+    }
+    .arch-box {
+      background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 0.6rem 0.4rem;
+    }
+    .arch-box b { display: block; font-size: 0.7rem; color: var(--accent); margin-bottom: 0.2rem; }
+    .arrow { color: var(--muted); }
+    .summary {
+      display: grid; grid-template-columns: repeat(4, 1fr); gap: 0.75rem; margin-bottom: 1.5rem;
+    }
+    .card {
+      background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 1rem;
+    }
+    .card .val { font-size: 1.6rem; font-weight: 700; }
+    .card .lbl { font-size: 0.75rem; color: var(--muted); margin-top: 0.25rem; }
+    .card.slow { border-color: #7f1d1d; }
+    .services { display: grid; gap: 0.75rem; }
+    .svc {
+      background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
+      padding: 1rem 1.25rem; display: grid; grid-template-columns: 140px 1fr 120px 100px; gap: 1rem; align-items: center;
+    }
+    .svc.slow { border-color: var(--slow); background: #1a0f0f; }
+    .svc-name { font-weight: 600; }
+    .svc-db { font-size: 0.75rem; color: var(--muted); }
+    .bar-wrap { background: #0b1220; border-radius: 999px; height: 10px; overflow: hidden; }
+    .bar { height: 100%; border-radius: 999px; background: var(--fast); transition: width 0.5s; }
+    .bar.slow { background: var(--slow); }
+    .badge {
+      display: inline-block; padding: 0.15rem 0.5rem; border-radius: 999px;
+      font-size: 0.65rem; font-weight: 700; text-transform: uppercase;
+    }
+    .badge-slow { background: #7f1d1d; color: #fca5a5; }
+    .badge-fast { background: #14532d; color: #86efac; }
+    .latency { font-weight: 700; text-align: right; }
+    .query { font-size: 0.78rem; color: var(--muted); font-family: monospace; }
+    .hint {
+      margin-top: 1.5rem; padding: 1rem; background: #0f172a; border: 1px solid #334155;
+      border-radius: 10px; font-size: 0.85rem; color: var(--muted); line-height: 1.6;
+    }
+    .hint code { color: #a5b4fc; background: #1e1b4b; padding: 0.1rem 0.35rem; border-radius: 4px; }
+    .loading { text-align: center; padding: 3rem; color: var(--muted); }
+    @media (max-width: 900px) {
+      .arch { grid-template-columns: 1fr; }
+      .arrow { display: none; }
+      .summary { grid-template-columns: 1fr 1fr; }
+      .svc { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div>
+      <h1>Retail Hub Platform</h1>
+      <p class="sub">Production microservices · PostgreSQL · MongoDB · Redis</p>
+    </div>
+    <button class="btn" id="loadBtn" onclick="loadDashboard()">Load Dashboard</button>
+  </header>
+
+  <main>
+    <section class="arch">
+      <div class="arch-box"><b>Web</b>retail-hub-web</div>
+      <div class="arrow">→</div>
+      <div class="arch-box"><b>Gateway</b>retail-hub-gateway</div>
+      <div class="arrow">→</div>
+      <div class="arch-box"><b>Orders</b>PG</div>
+      <div class="arch-box"><b>Users</b>Mongo</div>
+      <div class="arch-box"><b>Inventory</b>Redis</div>
+      <div class="arch-box"><b>Analytics</b>Mongo</div>
+      <div class="arch-box"><b>Payments</b>PG+Redis</div>
+    </section>
+
+    <section class="summary" id="summary" style="display:none">
+      <div class="card"><div class="val" id="totalMs">—</div><div class="lbl">Total Load Time</div></div>
+      <div class="card"><div class="val" id="svcCount">5</div><div class="lbl">Microservices</div></div>
+      <div class="card slow" id="slowCard"><div class="val" id="slowCount">—</div><div class="lbl">Slow Services</div></div>
+      <div class="card"><div class="val" id="statusOk">—</div><div class="lbl">Healthy</div></div>
+    </section>
+
+    <section id="content" class="loading">Click <strong>Load Dashboard</strong> — triggers 5 parallel microservice calls (2 intentional slow queries)</section>
+
+    <div class="hint" id="hint" style="display:none">
+      <strong>Slow services:</strong> <code>retail-hub-orders</code> (pg_sleep 2.5s) and
+      <code>retail-hub-analytics</code> (aggregate + 3s delay).
+      Check logs:
+      <code>kubectl logs -n prod -l app.kubernetes.io/component=orders -f</code>
+    </div>
+  </main>
+
+  <script>
+    async function loadDashboard() {
+      const btn = document.getElementById("loadBtn");
+      const content = document.getElementById("content");
+      btn.disabled = true;
+      content.className = "loading";
+      content.innerHTML = "Fan-out to 5 microservices in progress…";
+
+      const start = performance.now();
+      try {
+        const res = await fetch("/api/dashboard");
+        const clientMs = Math.round(performance.now() - start);
+        if (!res.ok) throw new Error("Gateway unavailable");
+        const data = await res.json();
+        render(data, clientMs);
+        document.getElementById("summary").style.display = "grid";
+        document.getElementById("hint").style.display = "block";
+      } catch (e) {
+        content.className = "loading";
+        content.innerHTML = "Failed to reach retail-hub-gateway. Check pods.";
+      }
+      btn.disabled = false;
+    }
+
+    function render(data, clientMs) {
+      const maxLat = Math.max(...data.services.map(s => s.latencyMs), 1);
+      document.getElementById("totalMs").textContent = data.totalLatencyMs + "ms";
+      document.getElementById("slowCount").textContent = data.slowServices.length;
+      document.getElementById("statusOk").textContent =
+        data.services.filter(s => s.ok).length + "/5";
+
+      const html = `<div class="services">${data.services.map(s => {
+        const isSlow = s.latencyMs > 1000 || s.slowQuery;
+        const pct = Math.min(100, (s.latencyMs / maxLat) * 100);
+        return `<article class="svc ${isSlow ? "slow" : ""}">
+          <div>
+            <div class="svc-name">${s.name}</div>
+            <div class="svc-db">${s.database || "—"}</div>
+          </div>
+          <div>
+            <div class="query">${escapeHtml(s.query || "")}</div>
+            <div class="bar-wrap" style="margin-top:0.5rem">
+              <div class="bar ${isSlow ? "slow" : ""}" style="width:${pct}%"></div>
+            </div>
+          </div>
+          <div><span class="badge ${isSlow ? "badge-slow" : "badge-fast"}">${isSlow ? "SLOW" : "FAST"}</span></div>
+          <div class="latency">${s.latencyMs}ms</div>
+        </article>`;
+      }).join("")}</div>
+      <p style="margin-top:1rem;font-size:0.8rem;color:#94a3b8">Browser round-trip: ${clientMs}ms · Gateway aggregate: ${data.totalLatencyMs}ms</p>`;
+
+      document.getElementById("content").className = "";
+      document.getElementById("content").innerHTML = html;
+    }
+
+    function escapeHtml(t) {
+      const d = document.createElement("div");
+      d.textContent = t;
+      return d.innerHTML;
+    }
+
+    window.addEventListener("load", () => loadDashboard());
+  </script>
+</body>
+</html>

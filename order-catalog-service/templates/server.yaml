@@ -1,0 +1,76 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "order-catalog-service.fullname" . }}
+  labels:
+    {{- include "order-catalog-service.labels" . | nindent 4 }}
+    app.kubernetes.io/component: server
+spec:
+  replicas: {{ .Values.server.replicaCount }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: {{ include "order-catalog-service.name" . }}
+      app.kubernetes.io/component: server
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: {{ include "order-catalog-service.name" . }}
+        app.kubernetes.io/component: server
+    spec:
+      {{- include "order-catalog-service.imagePullSecrets" . | nindent 6 }}
+      initContainers:
+        - name: wait-for-mongodb
+          image: busybox:1.36
+          command:
+            - sh
+            - -c
+            - |
+              until nc -z {{ include "order-catalog-service.fullname" . }}-mongodb {{ .Values.mongodb.port }}; do
+                echo "waiting for mongodb..."
+                sleep 2
+              done
+      containers:
+        - name: server
+          image: "{{ .Values.server.image.repository }}:{{ .Values.server.image.tag }}"
+          imagePullPolicy: {{ .Values.global.imagePullPolicy }}
+          ports: [{ name: http, containerPort: {{ .Values.server.port }} }]
+          env:
+            - name: PORT
+              value: {{ .Values.server.port | quote }}
+            - name: MONGODB_URI
+              value: {{ include "order-catalog-service.mongoUri" . | quote }}
+            - name: JWT_SECRET
+              value: {{ .Values.server.jwtSecret | quote }}
+            - name: JWT_EXPIRES_IN
+              value: {{ .Values.server.jwtExpiresIn | quote }}
+          resources:
+{{ toYaml .Values.server.resources | indent 12 }}
+          readinessProbe:
+            httpGet:
+              path: /api/health
+              port: {{ .Values.server.port }}
+            initialDelaySeconds: 10
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /api/health
+              port: {{ .Values.server.port }}
+            initialDelaySeconds: 30
+            periodSeconds: 10
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "order-catalog-service.fullname" . }}
+  labels:
+    {{- include "order-catalog-service.labels" . | nindent 4 }}
+    app.kubernetes.io/component: server
+spec:
+  type: {{ .Values.server.service.type }}
+  selector:
+    app.kubernetes.io/name: {{ include "order-catalog-service.name" . }}
+    app.kubernetes.io/component: server
+  ports:
+    - port: {{ .Values.server.port }}
+      targetPort: http
+      name: http

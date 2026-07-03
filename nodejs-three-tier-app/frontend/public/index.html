@@ -1,0 +1,386 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Ops Portal — Incident Management</title>
+  <style>
+    :root {
+      --bg: #0a0e17;
+      --surface: #121826;
+      --surface2: #1a2234;
+      --border: #2a3548;
+      --text: #eef2f7;
+      --muted: #8b9cb3;
+      --accent: #3b82f6;
+      --accent-hover: #2563eb;
+      --green: #22c55e;
+      --yellow: #eab308;
+      --orange: #f97316;
+      --red: #ef4444;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: "Inter", "Segoe UI", system-ui, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+    }
+    .topbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 1rem 2rem;
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+    }
+    .logo { font-size: 1.25rem; font-weight: 700; }
+    .logo small {
+      display: block;
+      font-size: 0.75rem;
+      font-weight: 400;
+      color: var(--muted);
+      margin-top: 0.15rem;
+    }
+    .live {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      font-size: 0.8rem;
+      color: var(--muted);
+    }
+    .dot {
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      background: var(--green);
+      animation: pulse 2s infinite;
+    }
+    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.4} }
+    .layout { max-width: 1200px; margin: 0 auto; padding: 1.5rem 2rem 3rem; }
+    .tiers {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 0.75rem;
+      margin-bottom: 1.5rem;
+    }
+    .tier {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 0.85rem 1rem;
+      font-size: 0.8rem;
+    }
+    .tier b { color: var(--accent); font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.06em; }
+    .tier h4 { margin: 0.35rem 0 0.15rem; font-size: 0.95rem; }
+    .tier span { color: var(--muted); }
+    .stats {
+      display: grid;
+      grid-template-columns: repeat(5, 1fr);
+      gap: 0.75rem;
+      margin-bottom: 1.5rem;
+    }
+    .stat-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 1rem;
+    }
+    .stat-card .num { font-size: 1.75rem; font-weight: 700; line-height: 1; }
+    .stat-card .lbl { font-size: 0.75rem; color: var(--muted); margin-top: 0.35rem; }
+    .grid { display: grid; grid-template-columns: 340px 1fr; gap: 1.25rem; }
+    .panel {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 1.25rem;
+    }
+    .panel h2 { font-size: 1rem; margin-bottom: 1rem; }
+    label { display: block; font-size: 0.75rem; color: var(--muted); margin-bottom: 0.35rem; }
+    input, select, textarea {
+      width: 100%;
+      padding: 0.65rem 0.75rem;
+      margin-bottom: 0.85rem;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: var(--bg);
+      color: var(--text);
+      font: inherit;
+      font-size: 0.9rem;
+    }
+    textarea { min-height: 80px; resize: vertical; }
+    .btn {
+      width: 100%;
+      padding: 0.7rem;
+      background: var(--accent);
+      color: white;
+      border: none;
+      border-radius: 8px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    .btn:hover { background: var(--accent-hover); }
+    .toolbar {
+      display: flex;
+      gap: 0.5rem;
+      margin-bottom: 1rem;
+      flex-wrap: wrap;
+    }
+    .filter-btn {
+      padding: 0.4rem 0.85rem;
+      border-radius: 999px;
+      border: 1px solid var(--border);
+      background: transparent;
+      color: var(--muted);
+      cursor: pointer;
+      font-size: 0.8rem;
+    }
+    .filter-btn.active, .filter-btn:hover {
+      background: var(--accent);
+      border-color: var(--accent);
+      color: white;
+    }
+    table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+    th {
+      text-align: left;
+      padding: 0.65rem 0.5rem;
+      color: var(--muted);
+      font-weight: 500;
+      border-bottom: 1px solid var(--border);
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+    td { padding: 0.85rem 0.5rem; border-bottom: 1px solid var(--border); vertical-align: top; }
+    tr:hover td { background: var(--surface2); }
+    .badge {
+      display: inline-block;
+      padding: 0.2rem 0.55rem;
+      border-radius: 999px;
+      font-size: 0.7rem;
+      font-weight: 600;
+      text-transform: uppercase;
+    }
+    .sev-low { background: #14532d; color: #86efac; }
+    .sev-medium { background: #713f12; color: #fde047; }
+    .sev-high { background: #7c2d12; color: #fdba74; }
+    .sev-critical { background: #7f1d1d; color: #fca5a5; }
+    .st-open { background: #1e3a5f; color: #93c5fd; }
+    .st-in_progress { background: #422006; color: #fcd34d; }
+    .st-resolved { background: #14532d; color: #86efac; }
+    .actions { display: flex; gap: 0.35rem; flex-wrap: wrap; }
+    .action-btn {
+      padding: 0.3rem 0.55rem;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      background: var(--bg);
+      color: var(--text);
+      cursor: pointer;
+      font-size: 0.72rem;
+    }
+    .action-btn:hover { border-color: var(--accent); color: var(--accent); }
+    .action-btn.danger:hover { border-color: var(--red); color: var(--red); }
+    .desc { color: var(--muted); font-size: 0.78rem; margin-top: 0.25rem; max-width: 280px; }
+    .empty { text-align: center; color: var(--muted); padding: 2.5rem; }
+    .toast {
+      position: fixed;
+      bottom: 1.5rem;
+      right: 1.5rem;
+      padding: 0.75rem 1rem;
+      border-radius: 8px;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      font-size: 0.85rem;
+      opacity: 0;
+      transition: opacity 0.3s;
+      pointer-events: none;
+    }
+    .toast.show { opacity: 1; }
+    @media (max-width: 900px) {
+      .stats { grid-template-columns: repeat(2, 1fr); }
+      .grid { grid-template-columns: 1fr; }
+      .tiers { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <header class="topbar">
+    <div class="logo">
+      Ops Portal
+      <small>Incident Management · Three-Tier Architecture</small>
+    </div>
+    <div class="live"><span class="dot"></span> Live · portal-web → portal-api → portal-db</div>
+  </header>
+
+  <main class="layout">
+    <section class="tiers">
+      <div class="tier"><b>Tier 1 · Web</b><h4>portal-web</h4><span>Node.js · Port 3000</span></div>
+      <div class="tier"><b>Tier 2 · API</b><h4>portal-api</h4><span>Node.js · Port 4000</span></div>
+      <div class="tier"><b>Tier 3 · DB</b><h4>portal-db</h4><span>PostgreSQL · Port 5432</span></div>
+    </section>
+
+    <section class="stats" id="stats">
+      <div class="stat-card"><div class="num" id="sTotal">—</div><div class="lbl">Total</div></div>
+      <div class="stat-card"><div class="num" id="sOpen">—</div><div class="lbl">Open</div></div>
+      <div class="stat-card"><div class="num" id="sProgress">—</div><div class="lbl">In Progress</div></div>
+      <div class="stat-card"><div class="num" id="sResolved">—</div><div class="lbl">Resolved</div></div>
+      <div class="stat-card"><div class="num" id="sCritical">—</div><div class="lbl">Critical</div></div>
+    </section>
+
+    <div class="grid">
+      <section class="panel">
+        <h2>Report Incident</h2>
+        <form id="createForm">
+          <label>Title</label>
+          <input id="title" placeholder="e.g. API timeout on checkout" required />
+          <label>Description</label>
+          <textarea id="description" placeholder="Describe the issue..." required></textarea>
+          <label>Severity</label>
+          <select id="severity">
+            <option value="low">Low</option>
+            <option value="medium" selected>Medium</option>
+            <option value="high">High</option>
+            <option value="critical">Critical</option>
+          </select>
+          <button type="submit" class="btn">Create Incident</button>
+        </form>
+      </section>
+
+      <section class="panel">
+        <h2>Incident Queue</h2>
+        <div class="toolbar" id="filters">
+          <button class="filter-btn active" data-status="">All</button>
+          <button class="filter-btn" data-status="open">Open</button>
+          <button class="filter-btn" data-status="in_progress">In Progress</button>
+          <button class="filter-btn" data-status="resolved">Resolved</button>
+        </div>
+        <div id="tableWrap"></div>
+      </section>
+    </div>
+  </main>
+
+  <div class="toast" id="toast"></div>
+
+  <script>
+    let currentFilter = "";
+
+    function toast(msg) {
+      const el = document.getElementById("toast");
+      el.textContent = msg;
+      el.classList.add("show");
+      setTimeout(() => el.classList.remove("show"), 3000);
+    }
+
+    function escapeHtml(t) {
+      const d = document.createElement("div");
+      d.textContent = t;
+      return d.innerHTML;
+    }
+
+    function badge(cls, text) {
+      return `<span class="badge ${cls}">${escapeHtml(text.replace("_", " "))}</span>`;
+    }
+
+    async function loadStats() {
+      const res = await fetch("/api/incidents/stats");
+      if (!res.ok) return;
+      const s = await res.json();
+      document.getElementById("sTotal").textContent = s.total;
+      document.getElementById("sOpen").textContent = s.open;
+      document.getElementById("sProgress").textContent = s.in_progress;
+      document.getElementById("sResolved").textContent = s.resolved;
+      document.getElementById("sCritical").textContent = s.critical;
+    }
+
+    async function loadIncidents() {
+      const url = currentFilter ? `/api/incidents?status=${currentFilter}` : "/api/incidents";
+      const res = await fetch(url);
+      const wrap = document.getElementById("tableWrap");
+      if (!res.ok) {
+        wrap.innerHTML = '<p class="empty">Cannot reach portal-api. Check pod logs.</p>';
+        return;
+      }
+      const rows = await res.json();
+      if (!rows.length) {
+        wrap.innerHTML = '<p class="empty">No incidents in this view.</p>';
+        return;
+      }
+      wrap.innerHTML = `<table>
+        <thead><tr>
+          <th>ID</th><th>Incident</th><th>Severity</th><th>Status</th><th>Updated</th><th>Actions</th>
+        </tr></thead>
+        <tbody>${rows.map(r => `
+          <tr>
+            <td>#${r.id}</td>
+            <td><strong>${escapeHtml(r.title)}</strong><div class="desc">${escapeHtml(r.description)}</div></td>
+            <td>${badge("sev-" + r.severity, r.severity)}</td>
+            <td>${badge("st-" + r.status, r.status)}</td>
+            <td>${new Date(r.updated_at).toLocaleString()}</td>
+            <td><div class="actions">
+              ${r.status !== "in_progress" ? `<button class="action-btn" onclick="updateStatus(${r.id},'in_progress')">Start</button>` : ""}
+              ${r.status !== "resolved" ? `<button class="action-btn" onclick="updateStatus(${r.id},'resolved')">Resolve</button>` : ""}
+              ${r.status !== "open" ? `<button class="action-btn" onclick="updateStatus(${r.id},'open')">Reopen</button>` : ""}
+              <button class="action-btn danger" onclick="deleteIncident(${r.id})">Delete</button>
+            </div></td>
+          </tr>`).join("")}</tbody>
+      </table>`;
+    }
+
+    async function refresh() {
+      await Promise.all([loadStats(), loadIncidents()]);
+    }
+
+    async function updateStatus(id, status) {
+      const res = await fetch(`/api/incidents/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status }),
+      });
+      if (res.ok) {
+        toast(`Incident #${id} → ${status.replace("_", " ")}`);
+        await refresh();
+      } else toast("Update failed");
+    }
+
+    async function deleteIncident(id) {
+      if (!confirm(`Delete incident #${id}?`)) return;
+      const res = await fetch(`/api/incidents/${id}`, { method: "DELETE" });
+      if (res.ok) {
+        toast(`Incident #${id} deleted`);
+        await refresh();
+      } else toast("Delete failed");
+    }
+
+    document.getElementById("createForm").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const body = {
+        title: document.getElementById("title").value.trim(),
+        description: document.getElementById("description").value.trim(),
+        severity: document.getElementById("severity").value,
+      };
+      const res = await fetch("/api/incidents", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      if (res.ok) {
+        const inc = await res.json();
+        toast(`Incident #${inc.id} created — check portal-api logs`);
+        e.target.reset();
+        await refresh();
+      } else toast("Create failed");
+    });
+
+    document.getElementById("filters").addEventListener("click", (e) => {
+      const btn = e.target.closest(".filter-btn");
+      if (!btn) return;
+      document.querySelectorAll(".filter-btn").forEach(b => b.classList.remove("active"));
+      btn.classList.add("active");
+      currentFilter = btn.dataset.status;
+      loadIncidents();
+    });
+
+    refresh();
+    setInterval(refresh, 15000);
+  </script>
+</body>
+</html>

@@ -1,0 +1,124 @@
+nameOverride: retail-hub
+fullnameOverride: retail-hub
+
+global:
+  deploymentEnv: production
+  imagePullPolicy: Always
+
+imageCredentials:
+  enabled: true
+  registry: incidence.azurecr.io
+  secretName: acr-registry-secret
+  username: ""
+  password: ""
+  email: devops@example.com
+
+postgres:
+  image:
+    repository: postgres
+    tag: "16-alpine"
+  port: 5432
+  database: retailhub
+  username: retailhub
+  password: changeme
+  storage: 2Gi
+  resources:
+    requests: { cpu: 100m, memory: 256Mi }
+    limits: { cpu: 500m, memory: 512Mi }
+
+mongodb:
+  image:
+    repository: mongo
+    tag: "7"
+  port: 27017
+  database: retailhub
+  username: retailhub
+  password: changeme
+  storage: 2Gi
+  resources:
+    requests: { cpu: 100m, memory: 512Mi }
+    limits: { cpu: 500m, memory: 1Gi }
+
+redis:
+  image:
+    repository: redis
+    tag: "7-alpine"
+  port: 6379
+  resources:
+    requests: { cpu: 50m, memory: 64Mi }
+    limits: { cpu: 200m, memory: 128Mi }
+
+web:
+  replicaCount: 1
+  image:
+    repository: incidence.azurecr.io/retail-hub-web
+    tag: "1.0.0"
+  port: 3000
+  resources:
+    requests: { cpu: 50m, memory: 64Mi }
+    limits: { cpu: 200m, memory: 128Mi }
+
+gateway:
+  replicaCount: 1
+  image:
+    repository: incidence.azurecr.io/retail-hub-gateway
+    tag: "1.0.0"
+  port: 8080
+  resources:
+    requests: { cpu: 50m, memory: 64Mi }
+    limits: { cpu: 300m, memory: 256Mi }
+
+orders:
+  replicaCount: 1
+  image:
+    repository: incidence.azurecr.io/retail-hub-orders
+    tag: "1.0.0"
+  port: 5001
+  resources:
+    requests: { cpu: 50m, memory: 64Mi }
+    limits: { cpu: 300m, memory: 256Mi }
+
+users:
+  replicaCount: 1
+  image:
+    repository: incidence.azurecr.io/retail-hub-users
+    tag: "1.0.0"
+  port: 5002
+  resources:
+    requests: { cpu: 50m, memory: 64Mi }
+    limits: { cpu: 300m, memory: 256Mi }
+
+inventory:
+  replicaCount: 1
+  image:
+    repository: incidence.azurecr.io/retail-hub-inventory
+    tag: "1.0.0"
+  port: 5003
+  resources:
+    requests: { cpu: 50m, memory: 64Mi }
+    limits: { cpu: 300m, memory: 256Mi }
+
+analytics:
+  replicaCount: 1
+  image:
+    repository: incidence.azurecr.io/retail-hub-analytics
+    tag: "1.0.0"
+  port: 5004
+  resources:
+    requests: { cpu: 50m, memory: 64Mi }
+    limits: { cpu: 300m, memory: 256Mi }
+
+payments:
+  replicaCount: 1
+  image:
+    repository: incidence.azurecr.io/retail-hub-payments
+    tag: "1.0.0"
+  port: 5005
+  resources:
+    requests: { cpu: 50m, memory: 64Mi }
+    limits: { cpu: 300m, memory: 256Mi }
+
+ingress:
+  enabled: false
+  className: nginx
+  host: retail-hub.local

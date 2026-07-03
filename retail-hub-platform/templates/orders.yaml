@@ -1,0 +1,60 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "retail-hub.fullname" . }}-orders
+  labels:
+    {{- include "retail-hub.labels" . | nindent 4 }}
+    app.kubernetes.io/component: orders
+spec:
+  replicas: {{ .Values.orders.replicaCount }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: {{ include "retail-hub.name" . }}
+      app.kubernetes.io/component: orders
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: {{ include "retail-hub.name" . }}
+        app.kubernetes.io/component: orders
+    spec:
+      {{- include "retail-hub.imagePullSecrets" . | nindent 6 }}
+      containers:
+        - name: orders
+          image: "{{ .Values.orders.image.repository }}:{{ .Values.orders.image.tag }}"
+          imagePullPolicy: {{ .Values.global.imagePullPolicy }}
+          ports: [{ name: http, containerPort: {{ .Values.orders.port }} }]
+          env:
+            - name: PORT
+              value: {{ .Values.orders.port | quote }}
+          envFrom:
+            - secretRef:
+                name: {{ include "retail-hub.fullname" . }}-postgres
+          resources:
+{{ toYaml .Values.orders.resources | indent 12 }}
+          startupProbe:
+            httpGet: { path: /ready, port: {{ .Values.orders.port }} }
+            periodSeconds: 5
+            failureThreshold: 60
+          readinessProbe:
+            httpGet: { path: /ready, port: {{ .Values.orders.port }} }
+            periodSeconds: 5
+          livenessProbe:
+            httpGet: { path: /health, port: {{ .Values.orders.port }} }
+            initialDelaySeconds: 15
+            periodSeconds: 10
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "retail-hub.fullname" . }}-orders
+  labels:
+    {{- include "retail-hub.labels" . | nindent 4 }}
+    app.kubernetes.io/component: orders
+spec:
+  selector:
+    app.kubernetes.io/name: {{ include "retail-hub.name" . }}
+    app.kubernetes.io/component: orders
+  ports:
+    - port: {{ .Values.orders.port }}
+      targetPort: http
+      name: http

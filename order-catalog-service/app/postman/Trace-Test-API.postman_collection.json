@@ -1,0 +1,362 @@
+{
+  "info": {
+    "name": "Trace Test API",
+    "description": "API collection for testing traces, auth, status codes, and slow MongoDB queries.\n\nBase URL variable: {{baseUrl}}\nAfter register/login, token is saved to {{token}}.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:3000" },
+    { "key": "token", "value": "" },
+    { "key": "userId", "value": "" },
+    { "key": "userEmail", "value": "alice@example.com" },
+    { "key": "userPassword", "value": "secret123" }
+  ],
+  "item": [
+    {
+      "name": "Auth",
+      "item": [
+        {
+          "name": "Register User",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "    const body = pm.response.json();",
+                  "    pm.collectionVariables.set('token', body.token);",
+                  "    pm.collectionVariables.set('userId', body.data.id);",
+                  "    pm.collectionVariables.set('userEmail', body.data.email);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Alice\",\n  \"email\": \"alice@example.com\",\n  \"password\": \"secret123\"\n}"
+            },
+            "url": "{{baseUrl}}/api/auth/register",
+            "description": "Register a new user. Returns 201 with JWT token.\n\nErrors: 400 (validation), 409 (duplicate email)"
+          }
+        },
+        {
+          "name": "Login",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    const body = pm.response.json();",
+                  "    pm.collectionVariables.set('token', body.token);",
+                  "    pm.collectionVariables.set('userId', body.data.id);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{userEmail}}\",\n  \"password\": \"{{userPassword}}\"\n}"
+            },
+            "url": "{{baseUrl}}/api/auth/login",
+            "description": "Login with email and password. Returns 200 with JWT token.\n\nErrors: 400 (missing fields), 401 (wrong credentials)"
+          }
+        },
+        {
+          "name": "Get Current User (Me)",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": "{{baseUrl}}/api/auth/me",
+            "description": "Get logged-in user profile. Requires Bearer token from register/login."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Timing Reference",
+      "item": [
+        {
+          "name": "Get All Expected Timings",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/timing-reference",
+            "description": "Returns expected response times and DB call counts. Check multiDbEndpoints field for APIs that hit MongoDB multiple times."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Health",
+      "item": [
+        {
+          "name": "Health Check",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/health",
+            "description": "Fast endpoint, no DB. Good baseline for trace comparison."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Multi DB Calls",
+      "description": "Endpoints that call MongoDB more than once. Best for testing separate query spans in traces.",
+      "item": [
+        {
+          "name": "Dashboard (5 DB calls)",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/dashboard",
+            "description": "5 DB calls: 3 parallel (User.countDocuments, Product.countDocuments, Order.find+populate) → 100ms sleep → Product.aggregate.\n\nExpected: 150–300ms"
+          }
+        },
+        {
+          "name": "Orders with Populate (3 DB calls)",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/orders",
+            "description": "3 DB calls: Order.find → User.find (populate) → Product.find (populate).\n\nExpected: 30–100ms"
+          }
+        },
+        {
+          "name": "Create Order (2 DB calls)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"userId\": \"{{userId}}\",\n  \"productIds\": [],\n  \"total\": 99.99\n}"
+            },
+            "url": "{{baseUrl}}/api/orders",
+            "description": "2 DB calls: User.findById (validate) → Order.create (insert).\n\nExpected: 20–80ms"
+          }
+        },
+        {
+          "name": "Orders Slow Join (1 DB call, internal $lookup)",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/orders/slow",
+            "description": "1 aggregation with 2× $lookup joins (users + products). Single round-trip but heavy join.\n\nExpected: 170–300ms"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Slow APIs (High Response Time)",
+      "item": [
+        {
+          "name": "Delay 500ms",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/delay/500",
+            "description": "Fixed 500ms artificial delay. No database."
+          }
+        },
+        {
+          "name": "Delay 2000ms",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/delay/2000",
+            "description": "Fixed 2-second artificial delay. No database."
+          }
+        },
+        {
+          "name": "Delay Random (100-3100ms)",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/delay/random",
+            "description": "Random delay between 100ms and 3100ms."
+          }
+        },
+        {
+          "name": "Users - Slow Query",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/users/slow",
+            "description": "Slow MongoDB: 200ms sleep + regex scan + sort. Check X-Response-Time header."
+          }
+        },
+        {
+          "name": "Products - Slow Aggregation",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/products/slow/aggregation",
+            "description": "Slow MongoDB: 300ms sleep + full collection aggregation."
+          }
+        },
+        {
+          "name": "Orders - Slow Join",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/orders/slow",
+            "description": "Slow MongoDB: 150ms sleep + $lookup join across users and products."
+          }
+        },
+        {
+          "name": "Dashboard - Chained Queries",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/dashboard",
+            "description": "Multiple parallel + serial MongoDB queries + 100ms sleep."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Fast APIs (Baseline)",
+      "item": [
+        {
+          "name": "List Users",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/users",
+            "description": "Fast indexed find, limit 50."
+          }
+        },
+        {
+          "name": "List Products",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/products",
+            "description": "Fast indexed find with optional filters."
+          }
+        },
+        {
+          "name": "List Orders",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/orders",
+            "description": "Orders with populate — moderate speed."
+          }
+        }
+      ]
+    },
+    {
+      "name": "500 Error APIs",
+      "item": [
+        {
+          "name": "Status 500 (Controlled)",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/status/500",
+            "description": "Returns a controlled 500 JSON error response."
+          }
+        },
+        {
+          "name": "Crash (Unhandled Exception)",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/crash",
+            "description": "Throws an unhandled exception — simulates a real server crash. Returns 500."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Other Status Codes",
+      "item": [
+        {
+          "name": "Status 200",
+          "request": { "method": "GET", "url": "{{baseUrl}}/api/status/200" }
+        },
+        {
+          "name": "Status 201",
+          "request": { "method": "GET", "url": "{{baseUrl}}/api/status/201" }
+        },
+        {
+          "name": "Status 204",
+          "request": { "method": "GET", "url": "{{baseUrl}}/api/status/204" }
+        },
+        {
+          "name": "Status 400",
+          "request": { "method": "GET", "url": "{{baseUrl}}/api/status/400" }
+        },
+        {
+          "name": "Status 401",
+          "request": { "method": "GET", "url": "{{baseUrl}}/api/status/401" }
+        },
+        {
+          "name": "Status 403",
+          "request": { "method": "GET", "url": "{{baseUrl}}/api/status/403" }
+        },
+        {
+          "name": "Status 404",
+          "request": { "method": "GET", "url": "{{baseUrl}}/api/status/404" }
+        },
+        {
+          "name": "Status 409",
+          "request": { "method": "GET", "url": "{{baseUrl}}/api/status/409" }
+        },
+        {
+          "name": "Status 422",
+          "request": { "method": "GET", "url": "{{baseUrl}}/api/status/422" }
+        },
+        {
+          "name": "Status 429",
+          "request": { "method": "GET", "url": "{{baseUrl}}/api/status/429" }
+        },
+        {
+          "name": "Status 503",
+          "request": { "method": "GET", "url": "{{baseUrl}}/api/status/503" }
+        }
+      ]
+    },
+    {
+      "name": "Users & Orders",
+      "item": [
+        {
+          "name": "Create User (no auth)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Bob\",\n  \"email\": \"bob@example.com\"\n}"
+            },
+            "url": "{{baseUrl}}/api/users",
+            "description": "Legacy user creation without password. Prefer /api/auth/register."
+          }
+        },
+        {
+          "name": "Get User by ID",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/users/{{userId}}",
+            "description": "Returns 404 if user ID not found."
+          }
+        },
+        {
+          "name": "Search Users by Role",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/users/search/by-role/user"
+          }
+        },
+        {
+          "name": "Create Order",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"userId\": \"{{userId}}\",\n  \"productIds\": [],\n  \"total\": 99.99\n}"
+            },
+            "url": "{{baseUrl}}/api/orders",
+            "description": "Requires valid userId and productIds from seeded data."
+          }
+        }
+      ]
+    }
+  ]
+}
