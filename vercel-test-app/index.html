@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Vercel Test App</title>
+  <style>
+    :root {
+      --bg: #0a0a0f;
+      --surface: #14141f;
+      --border: #2a2a3d;
+      --text: #f4f4f5;
+      --muted: #a1a1aa;
+      --accent: #0070f3;
+      --ok: #22c55e;
+      --err: #ef4444;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: system-ui, -apple-system, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      line-height: 1.5;
+    }
+    header {
+      padding: 2rem 1.5rem 1rem;
+      text-align: center;
+      border-bottom: 1px solid var(--border);
+      background: linear-gradient(180deg, #111827 0%, var(--bg) 100%);
+    }
+    header h1 { font-size: 1.75rem; font-weight: 700; }
+    header p { color: var(--muted); margin-top: 0.35rem; font-size: 0.95rem; }
+    main { max-width: 720px; margin: 0 auto; padding: 2rem 1.5rem 3rem; }
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 1.25rem;
+      margin-bottom: 1rem;
+    }
+    .card h2 { font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); margin-bottom: 0.75rem; }
+    .status-row { display: flex; align-items: center; gap: 0.6rem; font-size: 1.1rem; font-weight: 600; }
+    .dot {
+      width: 10px; height: 10px; border-radius: 50%;
+      background: var(--muted);
+      flex-shrink: 0;
+    }
+    .dot.ok { background: var(--ok); box-shadow: 0 0 8px var(--ok); }
+    .dot.err { background: var(--err); }
+    pre {
+      background: #0d0d14;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 1rem;
+      overflow-x: auto;
+      font-size: 0.8rem;
+      color: #cbd5e1;
+      margin-top: 0.75rem;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+    .actions { display: flex; flex-wrap: wrap; gap: 0.6rem; margin-top: 0.75rem; }
+    button {
+      padding: 0.55rem 1rem;
+      border: none;
+      border-radius: 8px;
+      background: var(--accent);
+      color: white;
+      font-weight: 600;
+      font-size: 0.9rem;
+      cursor: pointer;
+    }
+    button:hover { opacity: 0.9; }
+    button:disabled { opacity: 0.5; cursor: wait; }
+    button.secondary { background: transparent; border: 1px solid var(--border); color: var(--text); }
+    input {
+      flex: 1;
+      min-width: 180px;
+      padding: 0.55rem 0.75rem;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      background: #0d0d14;
+      color: var(--text);
+      font-size: 0.9rem;
+    }
+    .meta { display: grid; gap: 0.5rem; font-size: 0.9rem; }
+    .meta span { color: var(--muted); }
+    footer {
+      text-align: center;
+      padding: 1.5rem;
+      color: var(--muted);
+      font-size: 0.8rem;
+      border-top: 1px solid var(--border);
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Vercel Test App</h1>
+    <p>Simple static UI + serverless API for deployment smoke tests</p>
+  </header>
+
+  <main>
+    <section class="card">
+      <h2>Health check</h2>
+      <div class="status-row">
+        <span class="dot" id="statusDot"></span>
+        <span id="statusText">Checking…</span>
+      </div>
+      <pre id="healthOutput">Loading…</pre>
+      <div class="actions">
+        <button type="button" id="refreshBtn">Refresh health</button>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>Echo API</h2>
+      <p style="color: var(--muted); font-size: 0.9rem; margin-bottom: 0.75rem;">
+        Sends a message to <code>/api/echo</code> and shows the JSON response.
+      </p>
+      <div class="actions">
+        <input id="echoInput" type="text" placeholder="Type a test message…" value="Hello from Vercel!" />
+        <button type="button" id="echoBtn">Send echo</button>
+      </div>
+      <pre id="echoOutput">—</pre>
+    </section>
+
+    <section class="card">
+      <h2>Deployment info</h2>
+      <div class="meta">
+        <div><span>Page loaded:</span> <strong id="loadedAt">—</strong></div>
+        <div><span>Host:</span> <strong id="host">—</strong></div>
+        <div><span>API endpoints:</span> <strong>/api/health</strong>, <strong>/api/echo</strong></div>
+      </div>
+    </section>
+  </main>
+
+  <footer>AlertMend · k8s-incidence · vercel-test-app</footer>
+
+  <script>
+    const statusDot = document.getElementById('statusDot');
+    const statusText = document.getElementById('statusText');
+    const healthOutput = document.getElementById('healthOutput');
+    const echoOutput = document.getElementById('echoOutput');
+
+    document.getElementById('loadedAt').textContent = new Date().toLocaleString();
+    document.getElementById('host').textContent = window.location.host;
+
+    async function checkHealth() {
+      const btn = document.getElementById('refreshBtn');
+      btn.disabled = true;
+      statusDot.className = 'dot';
+      statusText.textContent = 'Checking…';
+      healthOutput.textContent = 'Loading…';
+
+      try {
+        const res = await fetch('/api/health');
+        const data = await res.json();
+        healthOutput.textContent = JSON.stringify(data, null, 2);
+        if (res.ok && data.status === 'ok') {
+          statusDot.className = 'dot ok';
+          statusText.textContent = 'API is healthy';
+        } else {
+          statusDot.className = 'dot err';
+          statusText.textContent = 'Unexpected response';
+        }
+      } catch (err) {
+        statusDot.className = 'dot err';
+        statusText.textContent = 'Request failed';
+        healthOutput.textContent = String(err);
+      } finally {
+        btn.disabled = false;
+      }
+    }
+
+    async function sendEcho() {
+      const btn = document.getElementById('echoBtn');
+      const message = document.getElementById('echoInput').value.trim();
+      btn.disabled = true;
+      echoOutput.textContent = 'Sending…';
+
+      try {
+        const url = '/api/echo?message=' + encodeURIComponent(message);
+        const res = await fetch(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ message }),
+        });
+        const data = await res.json();
+        echoOutput.textContent = JSON.stringify(data, null, 2);
+      } catch (err) {
+        echoOutput.textContent = String(err);
+      } finally {
+        btn.disabled = false;
+      }
+    }
+
+    document.getElementById('refreshBtn').addEventListener('click', checkHealth);
+    document.getElementById('echoBtn').addEventListener('click', sendEcho);
+    checkHealth();
+  </script>
+</body>
+</html>

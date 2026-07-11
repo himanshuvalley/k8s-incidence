@@ -1,0 +1,35 @@
+# VM 3 — PostgreSQL + Redis
+# Run on: DATA VM
+# Usage: docker compose up -d
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_DB: retailhub
+      POSTGRES_USER: retailhub
+      POSTGRES_PASSWORD: changeme
+    volumes:
+      - retail-hub-pg:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U retailhub -d retailhub"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+
+volumes:
+  retail-hub-pg:

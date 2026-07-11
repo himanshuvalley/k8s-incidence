@@ -1,0 +1,83 @@
+# VM 1 — All microservices (ACR images)
+# Run on: APPS VM
+#
+# Setup:
+#   cp .env.example .env
+#   # edit .env with MONGO_VM_IP and DATA_VM_IP
+#   az acr login --name incidence
+#   docker compose pull && docker compose up -d
+
+services:
+  orders:
+    image: incidence.azurecr.io/retail-hub-orders:1.0.0
+    environment:
+      PORT: "5001"
+      PG_HOST: ${DATA_VM_IP}
+      PG_PORT: "5432"
+      PG_DATABASE: retailhub
+      PG_USER: retailhub
+      PG_PASSWORD: changeme
+    restart: unless-stopped
+
+  users:
+    image: incidence.azurecr.io/retail-hub-users:1.0.0
+    environment:
+      PORT: "5002"
+      MONGO_URI: mongodb://retailhub:changeme@${MONGO_VM_IP}:27017/retailhub?authSource=admin
+      MONGO_DATABASE: retailhub
+    restart: unless-stopped
+
+  inventory:
+    image: incidence.azurecr.io/retail-hub-inventory:1.0.0
+    environment:
+      PORT: "5003"
+      REDIS_URL: redis://${DATA_VM_IP}:6379
+    restart: unless-stopped
+
+  analytics:
+    image: incidence.azurecr.io/retail-hub-analytics:1.0.0
+    environment:
+      PORT: "5004"
+      MONGO_URI: mongodb://retailhub:changeme@${MONGO_VM_IP}:27017/retailhub?authSource=admin
+      MONGO_DATABASE: retailhub
+    restart: unless-stopped
+
+  payments:
+    image: incidence.azurecr.io/retail-hub-payments:1.0.0
+    environment:
+      PORT: "5005"
+      PG_HOST: ${DATA_VM_IP}
+      PG_PORT: "5432"
+      PG_DATABASE: retailhub
+      PG_USER: retailhub
+      PG_PASSWORD: changeme
+      REDIS_URL: redis://${DATA_VM_IP}:6379
+    restart: unless-stopped
+
+  gateway:
+    image: incidence.azurecr.io/retail-hub-gateway:1.0.0
+    environment:
+      PORT: "8080"
+      ORDERS_URL: http://orders:5001
+      USERS_URL: http://users:5002
+      INVENTORY_URL: http://inventory:5003
+      ANALYTICS_URL: http://analytics:5004
+      PAYMENTS_URL: http://payments:5005
+    depends_on:
+      - orders
+      - users
+      - inventory
+      - analytics
+      - payments
+    restart: unless-stopped
+
+  web:
+    image: incidence.azurecr.io/retail-hub-web:1.0.0
+    ports:
+      - "3000:3000"
+    environment:
+      PORT: "3000"
+      GATEWAY_URL: http://gateway:8080
+    depends_on:
+      - gateway
+    restart: unless-stopped
